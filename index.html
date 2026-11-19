@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我的极简账本</title>
+<link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="极简账本">
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --primary-color: #2563eb;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+            --income-color: #10b981;
+            --expense-color: #ef4444;
+            --credit-color: #d97706;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); padding: 16px; padding-bottom: 140px; }
+        header { margin-bottom: 16px; text-align: center; }
+        header h1 { font-size: 1.4rem; }
+
+        .panel { background: var(--card-bg); padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+        .panel h3 { font-size: 0.95rem; margin-bottom: 8px; color: var(--text-sub); }
+
+        input, select, button { padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; width: 100%; margin-bottom: 8px; }
+        .form-row { display: flex; gap: 8px; }
+        .form-row > * { flex: 1; }
+
+        button { background: var(--primary-color); color: white; border: none; font-weight: bold; cursor: pointer; }
+        button.secondary { background: #64748b; }
+
+        .account-card { background: var(--card-bg); border-radius: 16px; padding: 16px; margin-bottom: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        .account-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px; }
+        .account-title { font-weight: bold; font-size: 1.1rem; }
+        .account-tag { font-size: 12px; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; color: #475569; margin-left: 6px; }
+        .account-tag.credit { background: #fef3c7; color: #b45309; }
+        .account-balance { font-weight: bold; font-size: 1.1rem; text-align: right; }
+        .balance-pos { color: var(--primary-color); }
+        .balance-neg { color: var(--credit-color); }
+
+        .detail-list { list-style: none; }
+        .detail-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #f1f5f9; font-size: 14px; }
+        .detail-note { font-weight: 500; }
+        .detail-date { font-size: 12px; color: var(--text-sub); }
+        .amount-in { color: var(--income-color); font-weight: bold; }
+        .amount-out { color: var(--expense-color); font-weight: bold; }
+        .amount-transfer { color: var(--text-sub); font-weight: bold; }
+
+        .add-form { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card-bg); padding: 12px 16px; box-shadow: 0 -4px 12px rgba(0,0,0,0.08); border-top-left-radius: 16px; border-top-right-radius: 16px; }
+        .tab-buttons { display: flex; gap: 8px; margin-bottom: 8px; }
+        .tab-btn { background: #e2e8f0; color: #64748b; padding: 6px; border-radius: 6px; font-size: 13px; text-align: center; cursor: pointer; flex: 1; border: none; font-weight: normal; }
+        .tab-btn.active { background: var(--primary-color); color: white; font-weight: bold; }
+        .delete-btn { background: none; border: none; color: #94a3b8; font-size: 12px; padding: 2px 6px; cursor: pointer; width: auto; }
+        
+        .backup-area { display: flex; gap: 8px; margin-top: 10px; }
+        .backup-area button { font-size: 12px; padding: 6px; background: #475569; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>我的专属账户账本</h1>
+    </header>
+
+    <!-- 1. 新建账户面板 -->
+    <div class="panel">
+        <h3>添加新账户</h3>
+        <input type="text" id="newAccountName" placeholder="账户名称 (如: 招商储蓄卡 / 招商信用卡)">
+        <select id="newAccountType">
+            <option value="asset">资产账户 (储蓄卡/微信/现金等)</option>
+            <option value="credit">负债账户 (信用卡等)</option>
+        </select>
+        <button onclick="addAccount()">确认添加账户</button>
+    </div>
+
+    <!-- 2. 账户明细展示容器 -->
+    <div id="accountsContainer"></div>
+
+    <!-- 3. 数据备份与恢复面板 -->
+    <div class="panel" style="margin-bottom: 120px;">
+        <h3>数据安全备份</h3>
+        <div class="backup-area">
+            <button class="secondary" onclick="exportData()">导出备份文件</button>
+            <button class="secondary" onclick="document.getElementById('importFile').click()">恢复备份</button>
+            <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+        </div>
+    </div>
+
+    <!-- 4. 底部固定记账表单 -->
+    <div class="add-form">
+        <div class="tab-buttons">
+            <button class="tab-btn active" id="tab-record" onclick="switchTab('record')">记收支</button>
+            <button class="tab-btn" id="tab-transfer" onclick="switchTab('transfer')">转账/还款</button>
+        </div>
+
+        <!-- 记收支表单 -->
+        <div id="form-record">
+            <div class="form-row">
+                <select id="recAccount"></select>
+                <select id="recType">
+                    <option value="out">支出 (-)</option>
+                    <option value="in">收入 (+)</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <input type="number" id="recAmount" placeholder="金额" step="0.01">
+                <input type="text" id="recNote" placeholder="备注 (如: 超市买菜)">
+                <button onclick="addRecord()">记一笔</button>
+            </div>
+        </div>
+
+        <!-- 转账/还款表单 -->
+        <div id="form-transfer" style="display: none;">
+            <div class="form-row">
+                <select id="trFrom" placeholder="转出账户"></select>
+                <select id="trTo" placeholder="转入账户"></select>
+            </div>
+            <div class="form-row">
+                <input type="number" id="trAmount" placeholder="转账/还款金额" step="0.01">
+                <input type="text" id="trNote" placeholder="备注 (如: 储蓄卡还信用卡)">
+                <button onclick="addTransfer()">确认转账</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let data = JSON.parse(localStorage.getItem('my_ledger_data_v2')) || {
+            accounts: [
+                { name: "招商银行储蓄卡", type: "asset" },
+                { name: "微信零钱", type: "asset" },
+                { name: "招商信用卡", type: "credit" }
+            ],
+            transactions: [
+                { id: 1, type: "in", account: "招商银行储蓄卡", amount: 8000, note: "发工资", date: "10-18" },
+                { id: 2, type: "out", account: "招商信用卡", amount: 1500, note: "网上购物", date: "10-19" }
+            ]
+        };
+
+        function saveData() {
+            localStorage.setItem('my_ledger_data_v2', JSON.stringify(data));
+            render();
+        }
+
+        function switchTab(type) {
+            document.getElementById('tab-record').className = type === 'record' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('tab-transfer').className = type === 'transfer' ? 'tab-btn active' : 'tab-btn';
+            document.getElementById('form-record').style.display = type === 'record' ? 'block' : 'none';
+            document.getElementById('form-transfer').style.display = type === 'transfer' ? 'block' : 'none';
+        }
+
+        function addAccount() {
+            const name = document.getElementById('newAccountName').value.trim();
+            const type = document.getElementById('newAccountType').value;
+            if (!name) return alert('请输入账户名称');
+            if (data.accounts.some(a => a.name === name)) return alert('账户名称已存在');
+            
+            data.accounts.push({ name, type });
+            document.getElementById('newAccountName').value = '';
+            saveData();
+        }
+
+        function deleteAccount(name) {
+            if (confirm(`确定删除“${name}”及相关明细吗？`)) {
+                data.accounts = data.accounts.filter(a => a.name !== name);
+                data.transactions = data.transactions.filter(t => t.account !== name && t.from !== name && t.to !== name);
+                saveData();
+            }
+        }
+
+        function addRecord() {
+            const account = document.getElementById('recAccount').value;
+            const type = document.getElementById('recType').value;
+            const amount = parseFloat(document.getElementById('recAmount').value);
+            const note = document.getElementById('recNote').value.trim() || (type === 'in' ? '收入' : '支出');
+
+            if (!account) return alert('请选择账户');
+            if (isNaN(amount) || amount <= 0) return alert('请输入有效金额');
+
+            const now = new Date();
+            data.transactions.unshift({
+                id: Date.now(), type, account, amount, note,
+                date: `${now.getMonth()+1}-${now.getDate()}`
+            });
+
+            document.getElementById('recAmount').value = '';
+            document.getElementById('recNote').value = '';
+            saveData();
+        }
+
+        function addTransfer() {
+            const from = document.getElementById('trFrom').value;
+            const to = document.getElementById('trTo').value;
+            const amount = parseFloat(document.getElementById('trAmount').value);
+            const note = document.getElementById('trNote').value.trim() || '账户互转/还款';
+
+            if (!from || !to) return alert('请选择转出和转入账户');
+            if (from === to) return alert('转出和转入不能是同一个账户');
+            if (isNaN(amount) || amount <= 0) return alert('请输入有效金额');
+
+            const now = new Date();
+            data.transactions.unshift({
+                id: Date.now(), type: 'transfer', from, to, amount, note,
+                date: `${now.getMonth()+1}-${now.getDate()}`
+            });
+
+            document.getElementById('trAmount').value = '';
+            document.getElementById('trNote').value = '';
+            saveData();
+        }
+
+        function deleteTransaction(id) {
+            data.transactions = data.transactions.filter(t => t.id !== id);
+            saveData();
+        }
+
+        function render() {
+            // 更新下拉选框
+            const accOptions = data.accounts.map(a => `<option value="${a.name}">${a.name} (${a.type==='credit'?'信用卡':'储蓄/资产'})</option>`).join('');
+            document.getElementById('recAccount').innerHTML = accOptions;
+            document.getElementById('trFrom').innerHTML = accOptions;
+            document.getElementById('trTo').innerHTML = accOptions;
+
+            // 渲染账户面板
+            const container = document.getElementById('accountsContainer');
+            container.innerHTML = '';
+
+            data.accounts.forEach(acc => {
+                // 计算余额
+                let balance = 0;
+                const list = data.transactions.filter(t => {
+                    if (t.type === 'transfer') return t.from === acc.name || t.to === acc.name;
+                    return t.account === acc.name;
+                });
+
+                list.forEach(t => {
+                    if (t.type === 'in') balance += t.amount;
+                    if (t.type === 'out') balance -= t.amount;
+                    if (t.type === 'transfer') {
+                        if (t.from === acc.name) balance -= t.amount; // 转出减少资产/增加还款
+                        if (t.to === acc.name) balance += t.amount;   // 转入增加资产/减少欠款
+                    }
+                });
+
+                // 渲染流水明细
+                const detailsHtml = list.map(t => {
+                    let desc = '', amtClass = '', sign = '';
+                    if (t.type === 'in') { desc = t.note; amtClass = 'amount-in'; sign = '+'; }
+                    else if (t.type === 'out') { desc = t.note; amtClass = 'amount-out'; sign = '-'; }
+                    else if (t.type === 'transfer') {
+                        desc = `${t.note} (${t.from} ➔ ${t.to})`;
+                        amtClass = 'amount-transfer';
+                        sign = t.to === acc.name ? '+' : '-';
+                    }
+
+                    return `
+                        <li class="detail-item">
+                            <div class="detail-info">
+                                <span class="detail-note">${desc}</span>
+                                <span class="detail-date">${t.date}</span>
+                            </div>
+                            <div>
+                                <span class="${amtClass}">${sign}${t.amount.toFixed(2)}</span>
+                                <button class="delete-btn" onclick="deleteTransaction(${t.id})">✕</button>
+                            </div>
+                        </li>
+                    `;
+                }).join('');
+
+                const isCredit = acc.type === 'credit';
+                const card = document.createElement('div');
+                card.className = 'account-card';
+                card.innerHTML = `
+                    <div class="account-header">
+                        <div>
+                            <span class="account-title">${acc.name}</span>
+                            <span class="account-tag ${isCredit?'credit':''}">${isCredit?'信用卡':'资产'}</span>
+                            <button class="delete-btn" onclick="deleteAccount('${acc.name}')">删除</button>
+                        </div>
+                        <div class="account-balance">
+                            <div style="font-size: 12px; color: var(--text-sub);">${isCredit?'当前欠款':'当前余额'}</div>
+                            <span class="${balance < 0 && isCredit ? 'balance-neg' : 'balance-pos'}">¥${Math.abs(balance).toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <ul class="detail-list">
+                        ${detailsHtml || '<li class="detail-item" style="color:#94a3b8">暂无流水记录</li>'}
+                    </ul>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 备份与恢复函数
+        function exportData() {
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `my_ledger_backup_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    data = JSON.parse(e.target.result);
+                    saveData();
+                    alert('数据恢复成功！');
+                } catch(err) {
+                    alert('文件格式错误！');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        render();
+    </script>
+</body>
+</html>
